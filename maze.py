@@ -1,5 +1,6 @@
 from tkinter import *
 from random import randint
+from tkextrafont import Font
 from copy import copy
 
 HEIGHT = 1000
@@ -11,17 +12,21 @@ class MazeGame:
         #Basic Setup
 
         self.window = Tk()
-        self.window.title('Maze Game')
+        self.window.title('Maze Generator')
         self.window.resizable(False, False)
         self.window.configure(bg = 'black')
 
         self.time = 0
-        self.show_after = None
+        self.dots = 0
+        
+        self.font = Font(file = 'resources/upheavtt.ttf', family = 'Upheaval TT -BRK-', size = 50)
 
         self.game_started       = False
         self.lost_game          = False
         self.game_over          = False
         self.drawing_finished   = False
+
+        self.show_after = None
 
         self.canvas = Canvas(self.window, height = HEIGHT, width = WIDTH, relief = RAISED, bg = 'black')
         self.canvas.pack()
@@ -40,89 +45,87 @@ class MazeGame:
 
     def bind(self):
         self.window.bind('<Button-1>',          lambda e: self.click())
-        self.window.bind('<Left>',              lambda e: self.press('left'))
-        self.window.bind('<Right>',             lambda e: self.press('right'))
-        self.window.bind('<Up>',                lambda e: self.press('up'))
-        self.window.bind('<Down>',              lambda e: self.press('down'))
-        self.window.bind('<KeyRelease-Left>',   lambda e: self.press('left', False))
-        self.window.bind('<KeyRelease-Right>',  lambda e: self.press('right', False))
-        self.window.bind('<KeyRelease-Up>',     lambda e: self.press('up', False))
-        self.window.bind('<KeyRelease-Down>',   lambda e: self.press('down', False))
+        self.window.bind('<Left>',              lambda e: self.press_key('left'))
+        self.window.bind('<Right>',             lambda e: self.press_key('right'))
+        self.window.bind('<Up>',                lambda e: self.press_key('up'))
+        self.window.bind('<Down>',              lambda e: self.press_key('down'))
+        self.window.bind('<KeyRelease-Left>',   lambda e: self.press_key('left', False))
+        self.window.bind('<KeyRelease-Right>',  lambda e: self.press_key('right', False))
+        self.window.bind('<KeyRelease-Up>',     lambda e: self.press_key('up', False))
+        self.window.bind('<KeyRelease-Down>',   lambda e: self.press_key('down', False))
         self.window.bind('<Escape>',            lambda e: self.show_solution())
 
-    def press(self, direction, press = True):
-        if not self.game_over:
-            self.run_timer = True
-        self.keys_pressed[direction] = press
+    def start(self):
+        self.canvas.delete('all')
+        self.font.configure(size = 70)
+        self.load_label = self.canvas.create_text(WIDTH / 2, HEIGHT / 2, text = 'Loading...', fill = 'white', font = self.font)
 
-    def click(self):
-        if (not self.game_started) or self.game_over:
-            print('start')
-            self.start()
+        if not self.show_after == None:
+            self.window.after_cancel(self.show_after)
 
-    def fix_corners(self):
-        dead_ends = [end for end in self.draw_squares if len(self.moves['{}, {}'.format(end[0], end[1])]) == 1]
-        for square in dead_ends:
+        self.moves              = {}
+        self.keys_pressed       = {'down': False, 'up': False, 'left': False, 'right': False}
+        
+        self.draw_squares       = [[1, 1]]
+        self.solution           = [[1, 1]]
+        self.coordinates        = [1, 1]
+        self.final_solution     = []
+
+        self.game_started       = True
+        self.lost_game          = False
+        self.game_over          = False
+        self.drawing_finished   = False
+        self.run_timer          = False
+
+        self.time               = -1
+        self.time_tick()
+
+        self.start_draw()
+        self.dot_loop()
+
+    def dot_loop(self):
+        self.canvas.itemconfig(self.load_label, text = 'Loading{}'.format(('.' * self.dots)[:-1]))
+        if self.dots == 4:
+            self.dots = 1
+        else:
+            self.dots += 1
+        
+        self.dot_after = self.window.after(350, self.dot_loop)
+
+    def time_tick(self):
+        self.time += 1
+        self.timer.configure(text = 'Timer: {}.{}'.format(str(self.time)[:-1], str(self.time)[-1]))
+
+    def done_drawing(self):
+        self.window.after_cancel(self.dot_after)
+        self.window.after_cancel(self.generate_after)
+        
+        self.canvas.delete('all')
+        self.canvas.create_line([[a[0] * SPACE_SIZE, a[1] * SPACE_SIZE] for a in self.draw_squares], fill = 'white', width = 15, joinstyle = MITER, capstyle = PROJECTING)
+
+        self.mark_moves()
+        self.canvas.create_rectangle(
+                                        SPACE_SIZE * 68.5, 
+                                        SPACE_SIZE * 48.5, 
+                                        SPACE_SIZE * 68.5 + SPACE_SIZE - 5, 
+                                        SPACE_SIZE * 48.5 + SPACE_SIZE - 5, 
+                                        fill = 'green', 
+                                        outline = ''
+                                    )
+        
+        for square in [end for end in self.draw_squares if len(self.moves['{}, {}'.format(end[0], end[1])]) == 1]:
             self.canvas.create_rectangle(
                                             square[0] * SPACE_SIZE - 7, 
                                             square[1] * SPACE_SIZE - 7, 
                                             square[0] * SPACE_SIZE + 15 - 7, 
                                             square[1] * SPACE_SIZE + 15 - 7, 
                                             fill = 'white',
-                                            outline = '')
+                                            outline = ''
+                                        )
 
-    def start(self):
-        self.canvas.delete('all')
-        self.canvas.create_text(WIDTH / 2, HEIGHT / 2, text = 'Loading...', fill = 'white', font = ("tktextfont", 30))
-
-        if not self.show_after == None:
-            self.window.after_cancel(self.show_after)
-
-        self.coordinates    = [1, 1]
-        self.move_combos    = {}
-        self.moves          = {}
-        self.keys_pressed   = {'down': False, 'up': False, 'left': False, 'right': False}
-        self.draw_squares   = [[1, 1]]
-        self.solution       = [[1, 1]]
-        self.final_solution = []
-        self.time           = 0
-
-        self.game_started       = True
-        self.lost_game          = False
-        self.game_over          = False
-        self.drawing_finished   = False
-
-        self.run_timer      = False
-        self.dead           = False
-        self.done           = False
-        self.time           = -1
-        self.time_tick()
-        self.reached_end    = False
-
-        self.new_draw()
-
-    def time_tick(self):
-        self.time += 1
-        self.timer.configure(text = 'Timer: {}'.format('{}.{}'.format(str(self.time)[:-1], str(self.time)[-1])))
-
-    def done_drawing(self):
-        self.make_line()
-        self.mark_moves()
-        self.canvas.create_rectangle(SPACE_SIZE * 68.5, SPACE_SIZE * 48.5, SPACE_SIZE * 68.5 + SPACE_SIZE, SPACE_SIZE * 48.5 + SPACE_SIZE, fill = 'green', outline = '', tag = 'end')
-        self.window.after_cancel(self.generate_after)
-        self.fix_corners()
         self.player = Player(self)
         self.drawing_finished = True
         self.check_moves()
-
-    def show_solution(self):
-        self.canvas.create_line([[a[0] * SPACE_SIZE, a[1] * SPACE_SIZE] for a in self.final_solution], fill = 'black', width = 25, joinstyle = MITER, capstyle = PROJECTING)
-        self.canvas.create_line([[a[0] * SPACE_SIZE, a[1] * SPACE_SIZE] for a in self.final_solution], fill = '#03a9fc', width = 15, joinstyle = MITER, capstyle = PROJECTING)
-        self.end(False)
-
-    def make_line(self):
-        self.canvas.delete('all')
-        self.canvas.create_line([[a[0] * SPACE_SIZE, a[1] * SPACE_SIZE] for a in self.draw_squares], fill = 'white', width = 15, joinstyle = MITER, capstyle = PROJECTING)
 
     def check_moves(self):
         if self.run_timer:
@@ -152,7 +155,6 @@ class MazeGame:
             next_square = self.draw_squares[index - 1]
             self.mark_move(square, next_square)
 
-
     def mark_move(self, square1, square2):
         string = '{}, {}'.format(square1[0], square1[1])
         if string not in self.moves:
@@ -160,9 +162,10 @@ class MazeGame:
         if square2 not in self.moves[string] and square2 != square1:
             self.moves[string].append(copy(square2))
 
-    def new_draw(self):
+    def start_draw(self):
         done_drawing = True
         possible_visits = self.get_visits(self.coordinates[0], self.coordinates[1])
+
         if len(possible_visits) == 0:
             still_solution = copy(self.solution)
             still_solution.reverse()
@@ -172,31 +175,35 @@ class MazeGame:
                         break
                     self.solution.remove(solution_square)
                     self.draw_squares.append(copy(solution_square))
+
                 else:
                     done_drawing = False
                     self.coordinates = copy(solution_square)
                     self.draw_squares.append(copy(solution_square))
                     break
+
             if not done_drawing:
-                self.generate_after = self.window.after_idle(self.new_draw)
+                self.generate_after = self.window.after_idle(self.start_draw)
             else:
                 self.done_drawing()
-            return
-        
-        next_visit = possible_visits[randint(0, len(possible_visits) - 1)]
-        if next_visit == [69, 49]:
-            self.final_solution = copy(self.solution)
-        possible_visits.remove(next_visit)
 
-        self.solution.append(copy(next_visit))
-        old = copy(self.coordinates)
-        self.coordinates = copy(next_visit)
-        self.draw_squares.append(copy(next_visit))
-        self.generate_after = self.window.after_idle(self.new_draw)
+        else:
+            next_visit = possible_visits[randint(0, len(possible_visits) - 1)]
+            if next_visit == [69, 49]:
+                self.final_solution = copy(self.solution)
+            possible_visits.remove(next_visit)
+
+            self.solution.append(copy(next_visit))
+            self.coordinates = copy(next_visit)
+            self.draw_squares.append(copy(next_visit))
+            self.generate_after = self.window.after_idle(self.start_draw)
 
     def get_visits(self, row, column):
-        combos = [[row - 1, column], [row + 1, column], [row, column - 1], [row, column + 1]]
-        return [combo for combo in combos if combo not in self.draw_squares and combo[0] in range(1, int(WIDTH / SPACE_SIZE)) and combo[1] in range(1, int(HEIGHT / SPACE_SIZE))]
+        return [combo for combo in [[row - 1, column], [row + 1, column], [row, column - 1], [row, column + 1]] 
+                    if  combo not in self.draw_squares 
+                        and combo[0] in range(1, int(WIDTH / SPACE_SIZE)) 
+                        and combo[1] in range(1, int(HEIGHT / SPACE_SIZE))
+                ]
 
     def add_move(self, baseX, baseY, newX, newY):
         string = '{}, {}'.format(baseX, baseY)
@@ -221,6 +228,28 @@ class MazeGame:
 
     def show_restart(self):
         self.canvas.create_image(0, 0, image = self.end_img, anchor = NW)
+        self.font.configure(size = 110)
+        if self.lost_game:
+            self.canvas.create_text(WIDTH / 2, HEIGHT / 2 - 100, text = 'You Lost', fill = 'white', font = self.font)
+            self.canvas.update()
+        else:
+            self.canvas.create_text(WIDTH / 2, HEIGHT / 2 - 100, text = 'GG!', fill = 'white', font = self.font)
+        self.canvas.create_text(WIDTH / 2, HEIGHT / 2 + 100, text = 'Time: {}.{}'.format(str(self.time)[:-1], str(self.time)[-1]), fill = 'white', font = self.font)
+
+    #Functions called when keys or mouse button are pressed
+    def press_key(self, direction, press = True):
+        if not self.game_over and self.game_started:
+            self.run_timer = True
+        self.keys_pressed[direction] = press
+    
+    def show_solution(self):
+        self.canvas.create_line([[a[0] * SPACE_SIZE, a[1] * SPACE_SIZE] for a in self.final_solution], fill = 'black', width = 25, joinstyle = MITER, capstyle = PROJECTING)
+        self.canvas.create_line([[a[0] * SPACE_SIZE, a[1] * SPACE_SIZE] for a in self.final_solution], fill = '#03a9fc', width = 15, joinstyle = MITER, capstyle = PROJECTING)
+        self.end(False)
+
+    def click(self):
+        if not self.game_started or self.game_over:
+            self.start()
 
 class Player:
     def __init__(self, game):
@@ -249,9 +278,8 @@ class Player:
             if game.check_coordinates(self.x, self.y, self.x, self.y + 1):
                 self.y += 1
                 game.canvas.move('player', 0, SPACE_SIZE)
+                
         if self.x == 69 and self.y == 49:
             game.end(True)
-
-
 
 game = MazeGame()

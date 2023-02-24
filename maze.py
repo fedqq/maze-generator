@@ -160,7 +160,7 @@ class MazeGame:
         if string not in self.moves:
             self.moves[string] = []
         if square2 not in self.moves[string] and square2 != square1:
-            self.moves[string].append(copy(square2))
+            self.moves[string].append(square2)
 
     def start_draw(self):
         done_drawing = True
@@ -174,12 +174,12 @@ class MazeGame:
                     if solution_square == [1, 1]:
                         break
                     self.solution.remove(solution_square)
-                    self.draw_squares.append(copy(solution_square))
+                    self.draw_squares.append(solution_square)
 
                 else:
                     done_drawing = False
-                    self.coordinates = copy(solution_square)
-                    self.draw_squares.append(copy(solution_square))
+                    self.coordinates = solution_square
+                    self.draw_squares.append(solution_square)
                     break
 
             if not done_drawing:
@@ -193,9 +193,9 @@ class MazeGame:
                 self.final_solution = copy(self.solution)
             possible_visits.remove(next_visit)
 
-            self.solution.append(copy(next_visit))
-            self.coordinates = copy(next_visit)
-            self.draw_squares.append(copy(next_visit))
+            self.solution.append(next_visit)
+            self.coordinates = next_visit
+            self.draw_squares.append(next_visit)
             self.generate_after = self.window.after_idle(self.start_draw)
 
     def get_visits(self, row, column):
